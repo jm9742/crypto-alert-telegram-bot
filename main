@@ -1,197 +1,316 @@
 import nest_asyncio
 nest_asyncio.apply()
 
-import asyncio
 import logging
+import asyncio
 import ccxt
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
 
-# Set up basic logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging for basic debugging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Telegram Bot Token and initialization
+# Add your Telegram bot token here
 TELEGRAM_BOT_TOKEN = '7189394361:AAEhmbqxwNAnteBf18Wn_L5OxbPAcmcj6NE'
-global_bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
-# Exchange initialization for CCXT
-exchange = ccxt.bitmart({'enableRateLimit': True})
+# Initialize the exchange using ccxt (change 'binance' if using another exchange)
+exchange = ccxt.bitmart({
+    'enableRateLimit': True
+})
 
-# User data and states definition
+# Define user interaction states
+(
+    AWAITING_COMMAND,  # After /start, waiting for the user to choose an action
+    AWAITING_TICKER_FOR_INFO,  # Waiting for the user to enter a ticker for info
+    AWAITING_TICKER_FOR_TRACKING_PRICE,  # Waiting for the user to enter a ticker for price tracking
+    AWAITING_TRACK_PRICE_METHOD,  # Waiting for the user to choose between percentage or absolute price change
+    AWAITING_TRACK_PRICE_VALUE,  # Waiting for the user to enter the percentage or absolute value for price alert
+    AWAITING_TICKER_FOR_TRACKING_VOLUME,  # Waiting for the user to enter a ticker for volume tracking
+    AWAITING_TRACK_VOLUME_METHOD,  # Waiting for the user to choose between percentage or absolute volume change
+    AWAITING_TRACK_VOLUME_VALUE,  # Waiting for the user to enter the percentage or absolute value for volume alert
+    AWAITING_TICKER_FOR_CONTINUOUS_ALERT,  # Waiting for the user to enter a ticker for continuous alerts
+    AWAITING_PERCENTAGE_FOR_CONTINUOUS_ALERT,  # Waiting for the user to enter the percentage for continuous alerts
+    ENDING_CONVERSATION  # User has chosen to end the interaction
+) = range(11)
+
+# Placeholder for tracking user interactions
 USER_STATES = {}
 USER_DATA = {}
 
-# Define user interaction states
-(AWAITING_TICKER_FOR_INFO, AWAITING_TICKER_FOR_TRACKING_PRICE, AWAITING_TRACK_PRICE_METHOD,
- AWAITING_TRACK_PRICE_VALUE, AWAITING_TICKER_FOR_TRACKING_VOLUME, AWAITING_TRACK_VOLUME_METHOD,
- AWAITING_TRACK_VOLUME_VALUE) = range(7)
+# Global bot instance
+global_bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
-# Define command handlers
+
+# Start command function
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        "Welcome! Here are the options:\n"
-        "/checkinfo - Check current price and volume of a cryptocurrency\n"
-        "/trackprice - Set an alert for price change\n"
-        "/trackvolume - Set an alert for volume change"
-    )
-
-async def checkinfo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Enter the cryptocurrency ticker (e.g., BTC/USDT):")
-    USER_STATES[update.effective_chat.id] = AWAITING_TICKER_FOR_INFO
-
-async def checkprice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Enter the cryptocurrency ticker (e.g., BTC/USDT):")
-    USER_STATES[update.effective_chat.id] = AWAITING_TICKER_FOR_PRICE
-
-async def checkvolume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Enter the cryptocurrency ticker to check volume (e.g., BTC/USDT):")
-    USER_STATES[update.effective_chat.id] = AWAITING_TICKER_FOR_VOLUME
-
-async def trackprice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
-        [InlineKeyboardButton("Percentage Change", callback_data='track_price_percentage')],
-        [InlineKeyboardButton("Absolute Price", callback_data='track_price_absolute')]
+        [InlineKeyboardButton("Check Coin Info", callback_data='check_info')],
+        [InlineKeyboardButton("Set Price Alert", callback_data='set_price_alert')],
+        [InlineKeyboardButton("Set Volume Alert", callback_data='set_volume_alert')],
+        [InlineKeyboardButton("Continuous Percentage Alert", callback_data='continuous_alert')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Choose tracking mode for price:', reply_markup=reply_markup)
-    USER_STATES[update.effective_chat.id] = AWAITING_TRACK_PRICE_METHOD
+    await update.message.reply_text("Welcome! Choose an option to get started:", reply_markup=reply_markup)
+    USER_STATES[update.effective_chat.id] = AWAITING_COMMAND
 
-async def trackvolume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    keyboard = [
-        [InlineKeyboardButton("Percentage Change", callback_data='track_volume_percentage')],
-        [InlineKeyboardButton("Absolute Volume", callback_data='track_volume_absolute')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Choose tracking mode for volume:', reply_markup=reply_markup)
-    USER_STATES[update.effective_chat.id] = AWAITING_TRACK_VOLUME_METHOD
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()  # Stop loading spinner on the button
+    chat_id = query.message.chat.id
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_state = USER_STATES.get(update.effective_chat.id)
+    if query.data == 'check_info':
+        await query.message.reply_text("Enter the cryptocurrency ticker (e.g., BTC/USDT):")
+        USER_STATES[chat_id] = AWAITING_TICKER_FOR_INFO
+    elif query.data == 'set_price_alert':
+        await query.message.reply_text("Enter the cryptocurrency ticker for which you want to set a price alert (e.g., BTC/USDT):")
+        USER_STATES[chat_id] = AWAITING_TICKER_FOR_TRACKING_PRICE
+    elif query.data == 'set_volume_alert':
+        await query.message.reply_text("Enter the cryptocurrency ticker for which you want to set a volume alert (e.g., BTC/USDT):")
+        USER_STATES[chat_id] = AWAITING_TICKER_FOR_TRACKING_VOLUME
+    elif query.data == 'continuous_alert':
+        await query.message.reply_text("Enter the cryptocurrency ticker for continuous alerts (e.g., BTC/USDT):")
+        USER_STATES[chat_id] = AWAITING_TICKER_FOR_CONTINUOUS_ALERT
+
+    elif query.data in ['price_alert_percentage', 'price_alert_absolute']:
+        # Assuming you store the alert type to use it later for validation
+        USER_DATA[chat_id]['alert_type'] = query.data
+        message_text = "Enter the threshold value for the price alert:"
+        if query.data == 'price_alert_percentage':
+            message_text += " (e.g., 5 for 5% increase or decrease)"
+        else:  # 'price_alert_absolute'
+            message_text += " (e.g., 20000 for alert when price reaches $20,000)"
+        await query.message.reply_text(message_text)
+        USER_STATES[chat_id] = AWAITING_TRACK_PRICE_VALUE
+
+    elif query.data in ['volume_alert_percentage', 'volume_alert_absolute']:
+        USER_DATA[chat_id]['alert_type'] = query.data
+        message_text = "Enter the threshold value for the volume alert:"
+        if query.data == 'volume_alert_percentage':
+            message_text += " (e.g., 10 for 10% increase or decrease)"
+        else:  # 'volume_alert_absolute'
+            message_text += " (e.g., 50000 for alert when volume reaches 50,000)"
+        await query.message.reply_text(message_text)
+        USER_STATES[chat_id] = AWAITING_TRACK_VOLUME_VALUE
+
+    # Ensure any additional or missing parts are correctly implemented based on your bot's functionality
+
+
+
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+# Assuming USER_STATES, USER_DATA, and exchange are defined and initialized elsewhere
+# Make sure to replace 'exchange' initialization with the correct exchange instance
+
+async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_input = update.message.text.upper()  # Convert user input to uppercase for consistency
     chat_id = update.effective_chat.id
+    user_state = USER_STATES.get(chat_id, AWAITING_COMMAND)
 
     if user_state == AWAITING_TICKER_FOR_INFO:
-        # User enters the ticker for information checking
-        ticker = update.message.text.upper()
         try:
-            info_data = exchange.fetch_ticker(ticker)
+            # Asynchronously fetch the ticker information
+            info_data = await exchange.fetch_ticker(user_input)
+            # Construct the response message
             response_message = (
-                f"📢 {ticker}\n"
-                f"Price: ${info_data['last']:.2f}\n"
+                f"📢 {user_input}\n"
+                f"Price: ${info_data['last']:.6f}\n"
                 f"Change: {info_data['percentage']:.2f}%\n"
-                f"High: ${info_data['high']:.2f}\n"
-                f"Low: ${info_data['low']:.2f}\n"
-                f"Volume: {info_data['quoteVolume']:.2f}"
+                f"High: ${info_data['high']:.6f}\n"
+                f"Low: ${info_data['low']:.6f}\n"
+                f"Volume: ${info_data['quoteVolume']:.2f}"
             )
             await update.message.reply_text(response_message)
         except Exception as e:
-            logger.error(f"Failed to fetch data for {ticker}: {e}")
-            await update.message.reply_text(f"Failed to fetch data. Please ensure the ticker is correct (like BTC/USDT) and try again.")
-        USER_STATES[chat_id] = None  # Reset the state after providing info
+            await update.message.reply_text(f"Failed to fetch info for {user_input}. Error: {str(e)}")
+        finally:
+            USER_STATES[chat_id] = AWAITING_COMMAND  # Reset the user state
 
     elif user_state == AWAITING_TICKER_FOR_TRACKING_PRICE:
-        # User enters the ticker for price tracking
-        ticker = update.message.text.upper()
-        USER_DATA[chat_id] = {'ticker': ticker}
-        # Prompt user to choose between percentage change or absolute price change
+        # Code to handle price alert setup
+        USER_DATA[chat_id] = {'ticker': user_input, 'alert_type': ''}
         keyboard = [
-            [InlineKeyboardButton("Percentage Change", callback_data='track_price_percentage')],
-            [InlineKeyboardButton("Absolute Price", callback_data='track_price_absolute')]
+            [InlineKeyboardButton("Percentage Change", callback_data='price_alert_percentage')],
+            [InlineKeyboardButton("Absolute Value", callback_data='price_alert_absolute')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text('Please select tracking mode by clicking one of the buttons:', reply_markup=reply_markup)
+        await update.message.reply_text("Select the type of price alert:", reply_markup=reply_markup)
         USER_STATES[chat_id] = AWAITING_TRACK_PRICE_METHOD
 
-    elif user_state == AWAITING_TRACK_PRICE_METHOD:
-        # This state is primarily handled via the callback query; added for completeness
-        await update.message.reply_text("Please select tracking mode using the buttons provided.")
-
-    elif user_state == AWAITING_TRACK_PRICE_VALUE:
-        # User specifies the value for tracking price change
-        value = float(update.message.text.strip())
-        USER_DATA[chat_id]['track_value'] = value
-        track_method = USER_DATA[chat_id]['track_method']
-        ticker = USER_DATA[chat_id]['ticker']
-        message = f"Tracking {ticker} for a " + ("price change of " if track_method == 'percentage' else "target price of $") + f"{value}. I will notify you when the condition is met."
-        await update.message.reply_text(message)
-        USER_STATES[chat_id] = None  # Reset the state after setting the tracking value
-
     elif user_state == AWAITING_TICKER_FOR_TRACKING_VOLUME:
-        # User enters the ticker for volume tracking
-        ticker = update.message.text.upper()
-        USER_DATA[chat_id] = {'ticker': ticker}
-        # Prompt user to choose between percentage change or absolute volume change
+        # Code to handle volume alert setup
+        USER_DATA[chat_id] = {'ticker': user_input, 'alert_type': ''}
         keyboard = [
-            [InlineKeyboardButton("Percentage Change", callback_data='track_volume_percentage')],
-            [InlineKeyboardButton("Absolute Volume", callback_data='track_volume_absolute')]
+            [InlineKeyboardButton("Percentage Change", callback_data='volume_alert_percentage')],
+            [InlineKeyboardButton("Absolute Value", callback_data='volume_alert_absolute')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text('Please select tracking mode for volume by clicking one of the buttons:', reply_markup=reply_markup)
+        await update.message.reply_text("Select the type of volume alert:", reply_markup=reply_markup)
         USER_STATES[chat_id] = AWAITING_TRACK_VOLUME_METHOD
 
-    elif user_state == AWAITING_TRACK_VOLUME_METHOD:
-        # This state is primarily handled via the callback query; added for completeness
-        await update.message.reply_text("Please select tracking mode for volume using the buttons provided.")
+    elif user_state == AWAITING_TRACK_PRICE_METHOD or user_state == AWAITING_TRACK_VOLUME_METHOD:
+        pass
+        # Await the user's next message for the alert threshold value
+        # The detailed confirmation message will be sent in the button_handler function based on the user's choice
 
+    elif user_state == AWAITING_TRACK_PRICE_VALUE:
+        # Code to finalize price alert setup with a detailed confirmation message
+        USER_DATA[chat_id]['value'] = user_input
+        alert_type = USER_DATA[chat_id]['alert_type']
+        confirmation_message = f"✅ Alert set for {USER_DATA[chat_id]['ticker']}. You will be notified when the change happens "
+        if alert_type == 'price_alert_percentage':
+            confirmation_message += f"changes by {user_input}%. "
+        else:  # alert_type == 'price_alert_absolute'
+            confirmation_message += f"reaches ${user_input}. "
+        confirmation_message += "We'll keep monitoring and notify you accordingly."
+        await update.message.reply_text(confirmation_message)
+        USER_STATES[chat_id] = AWAITING_COMMAND
+        
     elif user_state == AWAITING_TRACK_VOLUME_VALUE:
-        # User specifies the value for tracking volume change
-        value = float(update.message.text.strip())
-        USER_DATA[chat_id]['volume_track_value'] = value
-        volume_track_method = USER_DATA[chat_id]['volume_track_method']
-        ticker = USER_DATA[chat_id]['ticker']
-        message = f"Tracking {ticker} for a " + ("volume change of " if volume_track_method == 'percentage' else "target volume of ") + f"{value}. I will notify you when the condition is met."
-        await update.message.reply_text(message)
-        USER_STATES[chat_id] = None  # Reset the state after setting the tracking value
+        USER_DATA[chat_id]['value'] = user_input
+        alert_type_description = "percentage change" if USER_DATA[chat_id]['alert_type'] == 'volume_alert_percentage' else "absolute volume"
+        confirmation_message = f"✅ Volume alert set for {USER_DATA[chat_id]['ticker']}. You will be notified when the volume shows a {alert_type_description} of {user_input}. We'll keep monitoring and notify you accordingly."
+        
+        await update.message.reply_text(confirmation_message)
+        USER_STATES[chat_id] = AWAITING_COMMAND  # Reset the user state to await new commands or queries
+
+
+    elif user_state == AWAITING_TICKER_FOR_CONTINUOUS_ALERT:
+        USER_DATA[chat_id] = {'ticker': user_input, 'alert_type': 'continuous'}
+        await update.message.reply_text("Enter the percentage change for the alert (e.g., 5 for a 5% increase or decrease):")
+        USER_STATES[chat_id] = AWAITING_PERCENTAGE_FOR_CONTINUOUS_ALERT
+        
+        
+    elif user_state == AWAITING_PERCENTAGE_FOR_CONTINUOUS_ALERT:
+        
+        try:
+            percentage_value = float(user_input.strip('%'))
+            
+            if 0 < percentage_value <= 100:  # Ensure positive, non-zero percentage
+                
+                USER_DATA[chat_id]['percentage'] = percentage_value
+                await update.message.reply_text(f"Continuous alert for {USER_DATA[chat_id]['ticker']} set at ±{percentage_value}%. You will be notified of price changes meeting this criterion.")
+                USER_STATES[chat_id] = AWAITING_COMMAND
+                
+            else:
+                await update.message.reply_text("Please enter a positive percentage value between 0 and 100.")
+                
+        except ValueError:
+            await update.message.reply_text("Please enter a valid number for the percentage change.")
+
 
     else:
-        # Default case if the state does not match expected values
-        await update.message.reply_text("I'm not sure what you're trying to do. Can you try again? Please start with /trackprice or /trackvolume command.")
+        # Fallback for unexpected states
+        await update.message.reply_text("I'm not sure what you're trying to do. Please try again or use /start to see options.")
 
+import ccxt.async_support as ccxt
 
+# Initialize the Bitmart exchange
+exchange = ccxt.bitmart({
+    'enableRateLimit': True
+})
 
+async def fetch_coin_info(ticker):
+    try:
+        info = await exchange.fetch_ticker(ticker)
+        response_message = f"📢 {ticker}\n" \
+                           f"Price: ${info['last']:.6f}\n" \
+                           f"Change: {info['percentage']:.2f}%\n" \
+                           f"High: ${info['high']:.6f}\n" \
+                           f"Low: ${info['low']:.6f}\n" \
+                           f"Volume: ${info['quoteVolume']:.2f}"
+        return response_message
+    except Exception as e:
+        return f"Failed to fetch info for {ticker}. Error: {str(e)}"
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
+import asyncio
 
-    chat_id = query.message.chat_id
-    user_data = USER_DATA.get(chat_id, {})
+async def price_monitoring_task(bot):
+    while True:
+        for chat_id, user_data in list(USER_DATA.items()):
+            if 'ticker' in user_data:
+                ticker = user_data['ticker']
+                try:
+                    # Fetch the current price and volume data for the ticker
+                    current_price_data = await fetch_ticker(ticker)
+                    current_price = current_price_data['last']
+                    current_volume = current_price_data.get('volume', 0)  # Provide a default in case of missing data
 
-    # Handling button callback for price tracking method selection
-    if query.data in ['track_price_percentage', 'track_price_absolute']:
-        user_data['track_method'] = 'percentage' if query.data == 'track_price_percentage' else 'absolute'
-        USER_DATA[chat_id] = user_data
-        USER_STATES[chat_id] = AWAITING_TRACK_PRICE_VALUE
-        await query.edit_message_text("Please enter the target percentage or price value:")
+                    # Initialize original price and volume if not present
+                    if 'original_price' not in user_data:
+                        user_data['original_price'] = current_price
+                    if 'original_volume' not in user_data:
+                        user_data['original_volume'] = current_volume
 
-    # Handling button callback for volume tracking method selection
-    elif query.data in ['track_volume_percentage', 'track_volume_absolute']:
-        user_data['volume_track_method'] = 'percentage' if query.data == 'track_volume_percentage' else 'absolute'
-        USER_DATA[chat_id] = user_data
-        USER_STATES[chat_id] = AWAITING_TRACK_VOLUME_VALUE
-        await query.edit_message_text("Please enter the target volume change percentage or absolute value:")
+                    # Calculate price and volume changes
+                    original_price = user_data['original_price']
+                    original_volume = user_data['original_volume']
+                    price_change = current_price - original_price
+                    volume_change = current_volume - original_volume
+                    percentage_change = (price_change / original_price) * 100 if original_price else 0
+                    volume_percentage_change = (volume_change / original_volume) * 100 if original_volume else 0
 
-    else:
-        await query.edit_message_text("Invalid option selected. Please try again.")
+                    # Check for price alerts
+                    if 'price_alert_value' in user_data:
+                        if abs(price_change) >= user_data['price_alert_value']:
+                            alert_message = f"🔔 Price Alert: {ticker} has changed by ${price_change:.2f} from your alert setting. Current price is ${current_price}."
+                            await bot.send_message(chat_id, alert_message)
 
+                    if 'price_alert_percentage' in user_data:
+                        if abs(percentage_change) >= user_data['price_alert_percentage']:
+                            alert_message = f"🔔 Price Change Alert: {ticker} has changed by {percentage_change:.2f}% from your alert setting. Current price is ${current_price}."
+                            await bot.send_message(chat_id, alert_message)
 
-def main() -> None:
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("checkinfo", checkinfo))
-    application.add_handler(CommandHandler("trackprice", trackprice))
-    application.add_handler(CommandHandler("trackvolume", trackvolume))
-    application.add_handler(CallbackQueryHandler(button))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+                    # Check for volume alerts
+                    if 'volume_alert_value' in user_data:
+                        if abs(volume_change) >= user_data['volume_alert_value']:
+                            alert_message = f"🔔 Volume Alert: {ticker} volume has changed by {volume_change} from your alert setting. Current volume is {current_volume}."
+                            await bot.send_message(chat_id, alert_message)
 
-    # Run the price monitoring task alongside the bot
+                    if 'volume_alert_percentage' in user_data:
+                        if abs(volume_percentage_change) >= user_data['volume_alert_percentage']:
+                            alert_message = f"🔔 Volume Change Alert: {ticker} volume has changed by {volume_percentage_change:.2f}% from your alert setting. Current volume is {current_volume}."
+                            await bot.send_message(chat_id, alert_message)
+
+                    # Continuous alert for percentage change
+                    if 'continuous_alert_percentage' in user_data:
+                        last_price = user_data.get('last_notified_price', original_price)  # Use original_price if last_notified_price not set
+                        continuous_percentage_change = ((current_price - last_price) / last_price) * 100 if last_price else 0
+                        if abs(continuous_percentage_change) >= user_data['continuous_alert_percentage']:
+                            alert_message = f"🔔 Continuous Alert: {ticker} has changed by {continuous_percentage_change:.2f}% meeting your threshold. Current price is ${current_price}."
+                            await bot.send_message(chat_id, alert_message)
+                            user_data['last_notified_price'] = current_price  # Update for next alert
+
+                    # Update the original price and volume for next iteration only if there is a significant change
+                    if abs(percentage_change) >= 1 or abs(volume_percentage_change) >= 1:  # Update if change > 1%
+                        user_data['original_price'] = current_price
+                        user_data['original_volume'] = current_volume
+
+                except Exception as e:
+                    logger.error(f"Error checking price for {ticker}: {e}")
+        await asyncio.sleep(60)  # Check prices every 60 seconds, adjust as needed
+
+async def main():
+    TOKEN = TELEGRAM_BOT_TOKEN  # Replace with your actual bot token
+    application = Application.builder().token(TOKEN).build()
+
+    # Register your handlers here
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_error_handler(error_callback)
+    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), text_handler))
+
+    # Start the bot and the price monitoring task concurrently
+    await asyncio.gather(
+        application.run_polling(),
+        price_monitoring_task(application)
+    )
+    
     asyncio.create_task(price_monitoring_task(global_bot))
-
-    # Start the bot
     application.run_polling()
 
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("Bot stopped manually")
+if __name__ == '__main__':
+    asyncio.run(main())
