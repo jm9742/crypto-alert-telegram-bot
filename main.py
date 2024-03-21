@@ -4,63 +4,6 @@ print(telegram.__version__)
 import nest_asyncio
 nest_asyncio.apply()
 
-import asyncio
-import logging
-import ccxt.async_support as async_ccxt
-from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-TELEGRAM_BOT_TOKEN = "7131056450:AAEgN6hEGsRvOb1KZ4MzaGJHON2ynqYO4II"
-    
-exchange = async_ccxt.bitmart({'enableRateLimit': True})
-
-# Assuming states are defined as constants
-AWAITING_COMMAND = 0
-AWAITING_TICKER_FOR_INFO = 1
-AWAITING_TICKER_FOR_PRICE_ALERT = 2
-CHOOSING_PRICE_ALERT_TYPE = 3
-SETTING_PRICE_ALERT_PERCENTAGE = 4
-SETTING_PRICE_ALERT_ABSOLUTE = 5
-AWAITING_TICKER_FOR_VOLUME_ALERT = 6
-CHOOSING_VOLUME_ALERT_TYPE = 7
-SETTING_VOLUME_ALERT_PERCENTAGE = 8
-SETTING_VOLUME_ALERT_ABSOLUTE = 9
-AWAITING_TICKER_FOR_CONTINUOUS_PRICE_ALERT = 10
-SETTING_CONTINUOUS_ALERT_PERCENTAGE = 11
-
-# Global state management
-USER_STATES = {}
-USER_DATA = {}
-IS_MONITORING = True  # To control the monitoring loop
-
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a welcome message with initial options and a note about stopping the bot."""
-    keyboard = [
-        [InlineKeyboardButton("Check Coin Info", callback_data='check_info')],
-        [InlineKeyboardButton("Set Price Alert", callback_data='set_price_alert')],
-        [InlineKeyboardButton("Set Volume Alert", callback_data='set_volume_alert')],
-        [InlineKeyboardButton("Continuous Percentage Alert", callback_data='continuous_alert')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    welcome_message = (
-        "Welcome! Choose an option to get started:\n\n"
-        "You can use the commands below at any time:\n"
-        "- /start to display this message again.\n"
-        "- /stop to halt monitoring and stop all alerts.\n\n"
-        "Select an option from the menu to proceed."
-    )
-    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
-
-async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Stops the bot and monitoring tasks."""
-    global IS_MONITORING
-    IS_MONITORING = False
-    await update.message.reply_text('Monitoring and alerts have been stopped. Use /start to resume.')
 
 import asyncio
 import logging
@@ -119,6 +62,48 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global IS_MONITORING
     IS_MONITORING = False
     await update.message.reply_text('Monitoring and alerts have been stopped. Use /start to resume.')
+
+from telegram import Update
+from telegram.ext import CallbackContext
+
+async def button_handler(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat.id
+
+    logger.info(f"Button pressed: {query.data}, transitioning state for chat {chat_id}")
+
+    if query.data == 'check_info':
+        USER_STATES[chat_id] = AWAITING_TICKER_FOR_INFO
+        await context.bot.send_message(chat_id, "Enter the cryptocurrency ticker (e.g., BTC/USDT):")
+
+    elif query.data == 'set_price_alert':
+        USER_STATES[chat_id] = AWAITING_TICKER_FOR_PRICE_ALERT
+        await context.bot.send_message(chat_id, "Enter the cryptocurrency ticker for which you want to set a price alert (e.g., BTC/USDT):")
+
+    elif query.data == 'set_volume_alert':
+        USER_STATES[chat_id] = AWAITING_TICKER_FOR_VOLUME_ALERT
+        await context.bot.send_message(chat_id, "Enter the cryptocurrency ticker for which you want to set a volume alert (e.g., BTC/USDT):")
+
+    elif query.data == 'continuous_alert':
+        USER_STATES[chat_id] = AWAITING_TICKER_FOR_CONTINUOUS_PRICE_ALERT
+        await context.bot.send_message(chat_id, "Enter the cryptocurrency ticker for which you want to set a continuous price alert (e.g., BTC/USDT):")
+
+    elif query.data == 'price_alert_percentage':
+        USER_STATES[chat_id] = SETTING_PRICE_ALERT_PERCENTAGE
+        await context.bot.send_message(chat_id, "Enter the percentage change for the price alert (e.g., 5 for a 5% increase; -5 for 5% decrease):")
+
+    elif query.data == 'price_alert_absolute':
+        USER_STATES[chat_id] = SETTING_PRICE_ALERT_ABSOLUTE
+        await context.bot.send_message(chat_id, "Enter the absolute price value for the alert (e.g., 20000 for $20000 price):")
+
+    elif query.data == 'volume_alert_percentage':
+        USER_STATES[chat_id] = SETTING_VOLUME_ALERT_PERCENTAGE
+        await context.bot.send_message(chat_id, "Enter the percentage change for the volume alert (e.g., 5 for a 5% increase; -5 for 5% decrease):")
+
+    elif query.data == 'volume_alert_absolute':
+        USER_STATES[chat_id] = SETTING_VOLUME_ALERT_ABSOLUTE
+        await context.bot.send_message(chat_id, "Enter the absolute volume value for the alert (e.g., 50000 for 50000 units):")
 
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -201,6 +186,7 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
         logger.error(f"Error handling user input for chat {chat_id}: {e}")
         await update.message.reply_text("There was an error processing your request. Please try again.")
         USER_STATES[chat_id] = 0  # Reset to default state
+
 
 async def process_alert_setup(update, chat_id, user_state, user_input, alert_subtype):
     try:
