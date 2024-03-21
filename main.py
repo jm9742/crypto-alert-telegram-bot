@@ -348,7 +348,7 @@ async def monitor_prices_and_volumes():
                         logger.error(f"Failed to fetch data for {ticker}. Error: {e}")
 
         logger.info("Completed monitoring cycle, waiting for the next cycle.")
-        await asyncio.sleep(60)  # Adjust sleep time as needed
+        await asyncio.sleep(5)  # Adjust sleep time as needed
 
 async def main():
     # Create the Application using your bot's token
