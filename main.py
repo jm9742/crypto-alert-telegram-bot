@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = "7131056450:AAEgN6hEGsRvOb1KZ4MzaGJHON2ynqYO4II"
     
-exchange = async_ccxt.bitmart({'enableRateLimit': True})
+exchange = async_ccxt.bitmart({'enableRateLimit': False})
 
 # Assuming states are defined as constants
 AWAITING_COMMAND = 0
