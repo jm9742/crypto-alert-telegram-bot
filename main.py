@@ -174,13 +174,15 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
 
 async def process_alert_setup(update, chat_id, user_state, user_input, alert_subtype):
     try:
-        # Check if user input contains two values (e.g., "5, -5") and split them if so
         values = []
+        alert_direction = ""
         if ',' in user_input:
+            # Split input into two values if comma is present
             values = [float(val.strip()) for val in user_input.split(',')]
             alert_direction = f"an increase of {values[0]}% or a decrease of {-values[1]}%" if 'percentage' in alert_subtype else ""
         else:
-            values = [float(user_input)]  # Single value for traditional alerts
+            # Single value for traditional alerts
+            values = [float(user_input)]
             alert_direction = "increase" if values[0] > 0 else "decrease" if 'percentage' in alert_subtype else ""
 
         # Fetch current data for the ticker
@@ -188,32 +190,38 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
         current_price = current_data['last']
         current_change = current_data['percentage']
         current_volume = current_data['quoteVolume']
+
+        # Generate a single response message and alert info for either single or dual values
+        response_message = ""
+        alert_info = {'type': alert_subtype, 'value': values, 'ticker': USER_DATA[chat_id]['ticker']}
         
-        # Prepare alert data and message based on subtype
-        for value in values:
-            alert_info = {
-                'type': alert_subtype, 
-                'value': value, 
-                'ticker': USER_DATA[chat_id]['ticker']
-            }
+        if 'percentage' in alert_subtype:
+            if len(values) == 2:
+                # Response for dual values (increase and decrease)
+                response_message = (
+                    f"✅ Alert set successfully for {alert_direction} for {USER_DATA[chat_id]['ticker']}.\n"
+                    f"Current Price: ${current_price:.2f}\n"
+                    f"24H Change: {current_change:.2f}%"
+                )
+            else:
+                # Response for a single percentage value
+                response_message = (
+                    f"✅ Alert set successfully for a {values[0]}% {alert_direction} for {USER_DATA[chat_id]['ticker']}.\n"
+                    f"Current Price: ${current_price:.2f}\n"
+                    f"24H Change: {current_change:.2f}%"
+                )
+        elif 'absolute' in alert_subtype:
+            # Response for absolute value alerts (price or volume)
+            measure = "price" if alert_subtype == 'absolute' else "volume"
+            response_message = (
+                f"✅ Alert set successfully to notify when {measure} reaches ${values[0]:.2f} for {USER_DATA[chat_id]['ticker']}.\n"
+                f"Current {measure.capitalize()}: ${current_volume if measure == 'volume' else current_price:.2f}\n"
+                f"24H Change: {current_change:.2f}%"
+            )
 
-            # Customize message based on alert subtype and values
-            if alert_subtype == 'percentage' or alert_subtype == 'volume_percentage':
-                if len(values) == 2:  # Dual values
-                    response_message = f"✅ Alert set successfully for {alert_direction} for {USER_DATA[chat_id]['ticker']}.\n Current Price: ${current_price:.2f}\n 24H Change: {current_change:.2f}%"
-                    
-                else:  # Single value
-                    response_message = f"✅ Alert set successfully for a {value}% {alert_direction} for {USER_DATA[chat_id]['ticker']}.\n Current Price: ${current_price:.2f}\n 24H Change: {current_change:.2f}%"
-           
-            elif alert_subtype == 'absolute':
-                response_message = f"✅ Price alert set successfully to notify when price reaches ${value:.2f} for {USER_DATA[chat_id]['ticker']}.\n Current Price: ${current_price:.2f}\n 24H Change: {current_change:.2f}%"
-            
-            elif alert_subtype == 'volume_absolute':
-                response_message = f"✅ Volume alert set successfully to notify when volume reaches {value} for {USER_DATA[chat_id]['ticker']}.\n Current Volume: {current_volume:.2f}"
-
-            # Update user data and send the alert setup confirmation message
-            finalize_alert_setup(chat_id, alert_info)
-            await update.message.reply_text(response_message)
+        # Update user data and send the alert setup confirmation message
+        finalize_alert_setup(chat_id, alert_info)
+        await update.message.reply_text(response_message)
 
     except ValueError:
         await update.message.reply_text("Please enter a valid number or a valid number range in the format x, -y.")
