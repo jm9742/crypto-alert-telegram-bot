@@ -98,6 +98,8 @@ async def button_handler(update: Update, context: CallbackContext) -> None:
         USER_STATES[chat_id] = SETTING_VOLUME_ALERT_ABSOLUTE
         await context.bot.send_message(chat_id, "Enter the absolute volume value for the alert (e.g., 50000 for 50000 units):")
 
+
+
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackContext
@@ -172,6 +174,7 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("There was an error processing your request. Please try again.")
         USER_STATES[chat_id] = 0  # Reset to default state
 
+
 async def process_alert_setup(update, chat_id, user_state, user_input, alert_subtype):
     try:
         # Handling inputs with two values (e.g., "5, -5") or a single value.
@@ -195,21 +198,19 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
             }
             
             # Determine the direction for logging and response message.
-            alert_direction = "increase" if value > 0 else "decrease"
-
-            # Customizing the message for percentage or absolute alerts based on the subtype.
             if 'percentage' in alert_subtype or 'volume_percentage' in alert_subtype:
+                alert_direction = "increase" if value > 0 else "decrease"
                 # Handling dual values separately for more specific message.
                 if len(values) == 2:
                     response_message = f"✅ Alert set successfully for an increase of {abs(values[0])}% or a decrease of {abs(values[1])}% for {USER_DATA[chat_id]['ticker']}."
                 else:
                     response_message = f"✅ Alert set successfully for a {value}% {alert_direction} for {USER_DATA[chat_id]['ticker']}."
                 response_message += f"\nCurrent Price: ${current_price:.2f}\n24H Change: {current_change:.2f}%"
-            
-            elif 'absolute' in alert_subtype:
+
+            if 'absolute' in alert_subtype:
                 response_message = f"✅ Price alert set successfully to notify when price reaches ${value:.2f} for {USER_DATA[chat_id]['ticker']}.\nCurrent Price: ${current_price:.2f}\n24H Change: {current_change:.2f}%"
-            
-            elif 'volume_absolute' in alert_subtype:
+                
+            if 'volume_absolute' in alert_subtype:
                 response_message = f"✅ Volume alert set successfully to notify when volume reaches {value} for {USER_DATA[chat_id]['ticker']}.\nCurrent Volume: {current_volume:.2f}"
 
             # Updating user data and sending the alert setup confirmation message.
@@ -237,11 +238,6 @@ def finalize_alert_setup(chat_id: int, alert_info: dict):
     USER_DATA[chat_id]['alerts'].append(alert_info)
     logger.info(f"New alert added for chat {chat_id}: {alert_info}")
 
-import asyncio
-import logging
-
-logger = logging.getLogger(__name__)
-
 async def monitor_prices_and_volumes():
     while True:
         logger.info("Starting the monitoring loop.")
@@ -255,25 +251,15 @@ async def monitor_prices_and_volumes():
                     twenty_four_hour_change = current_data['percentage']
                     current_volume = current_data['quoteVolume']
                     previous_price = alert.get('previous_price', current_price)
+                    alert['previous_price'] = current_price  # Update for next iteration
 
                     # Handle Continuous Percentage Alerts for Price
-                    if alert.get('type') == 'absolute' and not alert.get('triggered', False):
-                            # Check if the current price has reached the alert's target value
-                            if (current_price >= alert['value'] and previous_price < alert['value']) or (current_price <= alert['value'] and previous_price > alert['value']):
-                                message = (f"🔔 Price Alert: {ticker} has reached the target price of ${alert['value']:.2f}. "
-                                           f"Previous price was ${previous_price:.2f}. Current price is ${current_price:.2f}.")
-                                await bot.send_message(chat_id, message)
-                                logger.info(f"Sent price alert for {ticker} to chat {chat_id}: {message}")
-                                alert['triggered'] = True  # Mark the alert as triggered
-                    
                     if alert.get('type') == 'percentage':
-                        previous_price = alert.get('previous_price', current_price)
-                        alert['previous_price'] = current_price  # Update for next iteration
                         price_change_percentage = ((current_price - previous_price) / previous_price) * 100 if previous_price else 0
 
                         if abs(price_change_percentage) >= abs(alert['value']):
                             direction = "increased" if price_change_percentage > 0 else "decreased"
-                            message = f"🔔 Continuous Price Alert: {ticker} has {direction} by {abs(price_change_percentage):.2f}% since the last notification. The current price is ${current_price:.2f}."
+                            message = f"🔔 Continuous Price Alert: {ticker} has {direction} by {abs(price_change_percentage):.2f}% (threshold {alert['value']}%) since the last notification. The current price is ${current_price:.2f}."
                             await bot.send_message(chat_id, message)
                             logger.info(f"Sent continuous price alert for {ticker} to chat {chat_id}. {message}")
 
@@ -285,9 +271,19 @@ async def monitor_prices_and_volumes():
 
                         if abs(volume_change_percentage) >= abs(alert['value']):
                             direction = "increased" if volume_change_percentage > 0 else "decreased"
-                            message = f"🔔 Continuous Volume Alert: {ticker} has {direction} by {abs(volume_change_percentage):.2f}% since the last notification. The current volume is {current_volume:.2f}."
+                            message = f"🔔 Continuous Volume Alert: {ticker} has {direction} by {abs(volume_change_percentage):.2f}% (threshold {alert['value']}%) since the last notification. The current volume is {current_volume:.2f}."
                             await bot.send_message(chat_id, message)
                             logger.info(f"Sent continuous volume alert for {ticker} to chat {chat_id}. {message}")
+
+                    # Absolute alerts for price and volume are not affected by threshold, so no change needed.
+                    if alert.get('type') == 'absolute' and not alert.get('triggered', False):
+                            # Check if the current price has reached the alert's target value
+                            if (current_price >= alert['value'] and previous_price < alert['value']) or (current_price <= alert['value'] and previous_price > alert['value']):
+                                message = (f"🔔 Price Alert: {ticker} has reached the target price of ${alert['value']:.2f}. "
+                                           f"Previous price was ${previous_price:.2f}. Current price is ${current_price:.2f}.")
+                                await bot.send_message(chat_id, message)
+                                logger.info(f"Sent price alert for {ticker} to chat {chat_id}: {message}")
+                                alert['triggered'] = True  # Mark the alert as triggered
                     
                     if alert.get('type') == 'volume_absolute' and not alert.get('triggered', False):
                             if current_volume >= alert['value']:
@@ -302,6 +298,7 @@ async def monitor_prices_and_volumes():
 
         logger.info("Completed monitoring cycle, waiting for the next cycle.")
         await asyncio.sleep(3)  # Adjust sleep time as needed
+
 async def main():
     # Create the Application using your bot's token
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
