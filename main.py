@@ -177,50 +177,55 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
 
 async def process_alert_setup(update, chat_id, user_state, user_input, alert_subtype):
     try:
-        # Handling inputs with two values (e.g., "5, -5") or a single value.
         if ',' in user_input:
+            # Handling inputs with two values
             values = [float(val.strip()) for val in user_input.split(',')]
         else:
+            # Handling a single value input
             values = [float(user_input)]
 
-        # Fetch current data for the ticker.
+        # Fetch current data for the ticker
         current_data = await exchange.fetch_ticker(USER_DATA[chat_id]['ticker'])
         current_price = current_data['last']
         current_change = current_data['percentage']
         current_volume = current_data['quoteVolume']
 
-        # Process each value to set up the alert.
+        alert_infos = []  # To store all alert info dictionaries
+
         for value in values:
             alert_info = {
                 'type': alert_subtype,
                 'value': value,
                 'ticker': USER_DATA[chat_id]['ticker']
             }
-            
-            # Determine the direction for logging and response message.
-            if 'percentage' in alert_subtype or 'volume_percentage' in alert_subtype:
-                alert_direction = "increase" if value > 0 else "decrease"
-                # Handling dual values separately for more specific message.
-                if len(values) == 2:
-                    response_message = f"✅ Alert set successfully for an increase of {abs(values[0])}% or a decrease of {abs(values[1])}% for {USER_DATA[chat_id]['ticker']}."
-                else:
-                    response_message = f"✅ Alert set successfully for a {value}% {alert_direction} for {USER_DATA[chat_id]['ticker']}."
-                response_message += f"\nCurrent Price: ${current_price:.2f}\n24H Change: {current_change:.2f}%"
+            alert_infos.append(alert_info)
 
-            if 'absolute' in alert_subtype:
-                response_message = f"✅ Price alert set successfully to notify when price reaches ${value:.2f} for {USER_DATA[chat_id]['ticker']}.\nCurrent Price: ${current_price:.2f}\n24H Change: {current_change:.2f}%"
-                
-            if 'volume_absolute' in alert_subtype:
-                response_message = f"✅ Volume alert set successfully to notify when volume reaches {value} for {USER_DATA[chat_id]['ticker']}.\nCurrent Volume: {current_volume:.2f}"
+        # Determine the direction for logging and response message based on alert_subtype
+        if 'percentage' in alert_subtype or 'volume_percentage' in alert_subtype:
+            alert_directions = ["increase" if value > 0 else "decrease" for value in values]
+            if len(values) == 2:
+                response_message = f"✅ Alert set successfully for an increase of {abs(values[0])}% or a decrease of {abs(values[1])}% for {USER_DATA[chat_id]['ticker']}."
+            else:
+                response_message = f"✅ Alert set successfully for a {values[0]}% {alert_directions[0]} for {USER_DATA[chat_id]['ticker']}."
+            response_message += f"\nCurrent Price: ${current_price:.2f}\n24H Change: {current_change:.2f}%"
 
-            # Updating user data and sending the alert setup confirmation message.
+        elif 'absolute' in alert_subtype:
+            response_message = f"✅ Price alert set successfully to notify when price reaches ${values[0]:.2f} for {USER_DATA[chat_id]['ticker']}.\nCurrent Price: ${current_price:.2f}\n24H Change: {current_change:.2f}%"
+        
+        elif 'volume_absolute' in alert_subtype:
+            response_message = f"✅ Volume alert set successfully to notify when volume reaches {values[0]} for {USER_DATA[chat_id]['ticker']}.\nCurrent Volume: {current_volume:.2f}"
+
+        # Update user data and send a single alert setup confirmation message for dual values or single value
+        for alert_info in alert_infos:
             finalize_alert_setup(chat_id, alert_info)
-            await update.message.reply_text(response_message)
+        
+        await update.message.reply_text(response_message)
 
     except ValueError:
         await update.message.reply_text("Please enter a valid number or a valid number range in the format x, -y.")
     finally:
         USER_STATES[chat_id] = 0  # Reset the user state after processing.
+
 
 def finalize_alert_setup(chat_id: int, alert_info: dict):
     """
@@ -297,7 +302,7 @@ async def monitor_prices_and_volumes():
                     logger.error(f"Failed to fetch data for {ticker}. Error: {e}")
 
         logger.info("Completed monitoring cycle, waiting for the next cycle.")
-        await asyncio.sleep(3)  # Adjust sleep time as needed
+        await asyncio.sleep(10)  # Adjust sleep time as needed
 
 async def main():
     # Create the Application using your bot's token
