@@ -253,6 +253,7 @@ async def monitor_prices_and_volumes():
                     current_price = current_data['last']
                     twenty_four_hour_change = current_data['percentage']
                     current_volume = current_data['quoteVolume']
+                    previous_price = alert.get('previous_price', current_price)
 
                     # Handle Continuous Percentage Alerts for Price
                     if alert.get('type') == 'absolute' and not alert.get('triggered', False):
