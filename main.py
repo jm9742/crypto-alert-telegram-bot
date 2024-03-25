@@ -60,7 +60,6 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     IS_MONITORING = False
     await update.message.reply_text('Monitoring and alerts have been stopped. Use /start to resume.')
 
-
 from telegram import Update
 from telegram.ext import CallbackContext
 
@@ -221,6 +220,22 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
     finally:
         USER_STATES[chat_id] = 0  # Reset the user state after processing.
 
+def finalize_alert_setup(chat_id: int, alert_info: dict):
+    """
+    Adds the new alert information to the user's list of alerts in USER_DATA.
+    
+    Args:
+        chat_id (int): The Telegram chat ID of the user.
+        alert_info (dict): A dictionary containing the alert's type, value, and associated ticker.
+    """
+    # If there is no 'alerts' key in the USER_DATA for this user, add one
+    if 'alerts' not in USER_DATA[chat_id]:
+        USER_DATA[chat_id]['alerts'] = []
+
+    # Add the new alert info to the user's list of alerts
+    USER_DATA[chat_id]['alerts'].append(alert_info)
+    logger.info(f"New alert added for chat {chat_id}: {alert_info}")
+
 import asyncio
 import logging
 
@@ -284,8 +299,7 @@ async def monitor_prices_and_volumes():
                     logger.error(f"Failed to fetch data for {ticker}. Error: {e}")
 
         logger.info("Completed monitoring cycle, waiting for the next cycle.")
-        await asyncio.sleep(5)  # Adjust sleep time as needed
-
+        await asyncio.sleep(3)  # Adjust sleep time as needed
 async def main():
     # Create the Application using your bot's token
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
