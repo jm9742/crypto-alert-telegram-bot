@@ -219,7 +219,7 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
 
 async def process_alert_setup(update, chat_id, user_state, user_input, alert_subtype):
     try:
-        # Split the input on a comma if present, or create a single item list
+        # Parse the input values, allowing for comma-separated values for dual thresholds
         values = [float(val.strip()) for val in user_input.split(',') if val.strip()]
 
         # Fetch current data for the ticker
@@ -229,39 +229,35 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
             await update.message.reply_text(f"Data for {ticker} not found.")
             return
 
-        current_price = float(ticker_data['last'])
-        # Ensure you're using the correct key for current change and volume in your data
-        current_change = float(ticker_data['fluctuation'])
-        current_volume = float(ticker_data['volume_24h'])
+        # Update or create the 'alerts' key in USER_DATA
+        if 'alerts' not in USER_DATA[chat_id]:
+            USER_DATA[chat_id]['alerts'] = []
 
-        # Initialize an empty list to hold alert info
-        alert_infos = []
-
-        # Construct the alert info based on the input values
+        # Prepare the alert info based on the input values
         for value in values:
-            direction = "increase" if value > 0 else "decrease"
-            alert_infos.append({
+            alert_info = {
                 'type': alert_subtype,
                 'value': value,
-                'direction': direction,
                 'ticker': ticker
-            })
+            }
+            USER_DATA[chat_id]['alerts'].append(alert_info)
 
-        # Construct a response message for the alert setup
+        # Log the alert setup
+        logger.info(f"Alert(s) set for chat {chat_id} on ticker {ticker}: {USER_DATA[chat_id]['alerts']}")
+
+        # Send a confirmation message for each alert
         response_messages = []
-        for alert_info in alert_infos:
-            response_messages.append(f"✅ Alert set for a {alert_info['value']}% {alert_info['direction']} for {alert_info['ticker']}.")
+        for alert in USER_DATA[chat_id]['alerts']:
+            if alert['type'] == 'absolute':
+                response_messages.append(f"✅ Alert set to notify when the price reaches ${alert['value']:.2f} for {ticker}.")
+            elif alert['type'] in ['percentage', 'volume_percentage']:
+                direction = "increase" if alert['value'] > 0 else "decrease"
+                response_messages.append(f"✅ Alert set for a {alert['value']}% {direction} for {ticker}.")
+            elif alert['type'] == 'volume_absolute':
+                response_messages.append(f"✅ Volume alert set to notify when the volume reaches {alert['value']} for {ticker}.")
 
         final_response_message = " ".join(response_messages)
-        final_response_message += f"\nCurrent Price: ${current_price:.2f}\n24H Change: {current_change:.2f}%\n24H Volume: {current_volume}"
-
-        # Send the alert setup confirmation message
         await update.message.reply_text(final_response_message)
-
-        # Here you should store or update the alert in your system
-        # This is just an example placeholder
-        for alert_info in alert_infos:
-            finalize_alert_setup(chat_id, alert_info)
 
     except ValueError:
         await update.message.reply_text("Please enter a valid number or a comma-separated pair of numbers for the alert.")
@@ -271,6 +267,7 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
     finally:
         # Reset the user state after processing
         USER_STATES[chat_id] = 0
+
 
 def finalize_alert_setup(chat_id: int, alert_info: dict):
     """
@@ -288,7 +285,9 @@ def finalize_alert_setup(chat_id: int, alert_info: dict):
     USER_DATA[chat_id]['alerts'].append(alert_info)
     logger.info(f"New alert added for chat {chat_id}: {alert_info}")
 
-async def monitor_prices_and_volumes():
+import asyncio
+
+async def monitor_prices_and_volumes(bot):
     global IS_MONITORING, crypto_data
     while IS_MONITORING:
         logger.info("Starting the monitoring loop.")
@@ -297,58 +296,65 @@ async def monitor_prices_and_volumes():
                 for alert in user_info['alerts']:
                     ticker = alert.get('ticker')
                     try:
-                        # Directly use the updated crypto_data dictionary
                         current_data = crypto_data.get(ticker, {})
-                        if not current_data:  # Skip if no data available for the ticker
+                        if not current_data:
+                            logger.info(f"No data for ticker {ticker}. Skipping.")
                             continue
 
-                        current_price = float(current_data['last'])
-                        previous_price = alert.get('previous_price', current_price)  # Use current price as previous if not set
-                        alert['previous_price'] = current_price  # Update for the next iteration
+                        current_price = float(current_data.get('last', 0))
+                        current_volume = float(current_data.get('volume_24h', 0))
+                        previous_price = alert.get('previous_price', current_price)
+                        previous_volume = alert.get('previous_volume', current_volume)
 
-                        # Calculating the percentage change if type is 'percentage'
                         if alert.get('type') == 'percentage':
-                            percentage_change = ((current_price - previous_price) / previous_price) * 100 if previous_price else 0
-                            if abs(percentage_change) >= abs(alert['value']):
-                                direction = "increased" if percentage_change > 0 else "decreased"
-                                message = f"🔔 Continuous Price Alert: {ticker} has {direction} by {abs(percentage_change):.2f}% (threshold {alert['value']}%) since the last notification. The current price is ${current_price:.2f}."
-                                await bot.send_message(chat_id, message)
-                                logger.info(f"Sent continuous price alert for {ticker} to chat {chat_id}: {message}")
-                                
-                        if alert.get('type') == 'volume_percentage':
-                            previous_volume = alert.get('previous_volume', current_volume)
-                            alert['previous_volume'] = current_volume  # Update for next iteration
-                            volume_change_percentage = ((current_volume - previous_volume) / previous_volume) * 100 if previous_volume else 0
+                            price_change_percentage = ((current_price - previous_price) / previous_price) * 100 if previous_price else 0
+                            if abs(price_change_percentage) >= abs(alert['value']):
+                                direction = "increased" if price_change_percentage > 0 else "decreased"
+                                message = f"🔔 Price Alert: {ticker} has {direction} by {abs(price_change_percentage):.4f}% (threshold: {alert['value']}%). Current price is ${current_price:.2f}."
+                                await send_alert_message(bot, chat_id, message)
 
-                        if abs(volume_change_percentage) >= abs(alert['value']):
-                            direction = "increased" if volume_change_percentage > 0 else "decreased"
-                            message = f"🔔 Continuous Volume Alert: {ticker} has {direction} by {abs(volume_change_percentage):.2f}% (threshold {alert['value']}%) since the last notification. The current volume is {current_volume:.2f}."
-                            await bot.send_message(chat_id, message)
-                            logger.info(f"Sent continuous volume alert for {ticker} to chat {chat_id}. {message}")
-                            
-                            
-                        if alert.get('type') == 'absolute' and not alert.get('triggered', False):
-                            # Check if the current price has reached the alert's target value
-                            if (current_price >= alert['value'] and previous_price < alert['value']) or (current_price <= alert['value'] and previous_price > alert['value']):
-                                message = (f"🔔 Price Alert: {ticker} has reached the target price of ${alert['value']:.2f}. "
-                                           f"Previous price was ${previous_price:.2f}. Current price is ${current_price:.2f}.")
-                                await bot.send_message(chat_id, message)
-                                logger.info(f"Sent price alert for {ticker} to chat {chat_id}: {message}")
-                                alert['triggered'] = True  # Mark the alert as triggered
-                                
-                        if alert.get('type') == 'volume_absolute' and not alert.get('triggered', False):
-                            if current_volume >= alert['value']:
-                                message = (f"🔔 Volume Alert: {ticker} has reached the target volume of {alert['value']}. "
-                                           f"The current volume is {current_volume:.2f}.")
-                                await bot.send_message(chat_id, message)
-                                logger.info(f"Sent volume alert for {ticker} to chat {chat_id}: {message}")
-                                alert['triggered'] = True  # Mark the alert as triggered to prevent repeated notifications
-                        
+                        if alert.get('type') == 'volume_percentage':
+                            volume_change_percentage = ((current_volume - previous_volume) / previous_volume) * 100 if previous_volume else 0
+                            if abs(volume_change_percentage) >= abs(alert['value']):
+                                direction = "increased" if volume_change_percentage > 0 else "decreased"
+                                message = f"🔔 Volume Alert: {ticker} has {direction} by {abs(volume_change_percentage):.4f}% (threshold: {alert['value']}%). Current volume is {current_volume:.2f}."
+                                await send_alert_message(bot, chat_id, message)
+
+                        if alert.get('type') == 'absolute':
+                            price_crossed = (previous_price < alert['value'] <= current_price) or (previous_price > alert['value'] >= current_price)
+                            if price_crossed and not alert.get('triggered', False):
+                                message = f"🔔 Price Alert: {ticker} has reached the target price of ${alert['value']:.2f}. Current price is ${current_price:.2f}."
+                                await send_alert_message(bot, chat_id, message)
+                                alert['triggered'] = True
+
+                        if alert.get('type') == 'volume_absolute':
+                            volume_crossed = (previous_volume < alert['value'] <= current_volume) or (previous_volume > alert['value'] >= current_volume)
+                            if volume_crossed and not alert.get('triggered', False):
+                                message = f"🔔 Volume Alert: {ticker} has reached the target volume of {alert['value']}. Current volume is {current_volume:.2f}."
+                                await send_alert_message(bot, chat_id, message)
+                                alert['triggered'] = True
+
+                        # Update the previous values
+                        alert['previous_price'] = current_price
+                        alert['previous_volume'] = current_volume
+
                     except Exception as e:
                         logger.error(f"Error processing alert for {ticker}: {e}")
 
         logger.info("Completed monitoring cycle, waiting for the next cycle.")
-        await asyncio.sleep(10)  # Sleep time can be adjusted based on your needs
+        await asyncio.sleep(1)
+
+async def send_alert_message(bot, chat_id, message):
+    try:
+        await bot.send_message(chat_id, message)
+        logger.info(f"Alert sent to chat {chat_id}: {message}")
+    except Exception as e:
+        logger.error(f"Failed to send message to chat {chat_id}: {e}")
+
+# Setup logging as per your requirement
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # Or DEBUG for more info
 
 async def main():
     # Create the Application using your bot's token
