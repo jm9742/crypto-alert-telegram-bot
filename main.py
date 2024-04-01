@@ -231,30 +231,28 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
         # Parse the input values, allowing for comma-separated values for dual thresholds
         values = [float(val.strip()) for val in user_input.split(',') if val.strip()]
 
-        # Fetch current data for the ticker
-        ticker = USER_DATA[chat_id]['ticker']
+        if USER_DATA[chat_id]['alerts']:
+            ticker = USER_DATA[chat_id]['alerts'][-1]['ticker']
+        else:
+            await update.message.reply_text("No ticker selected for alert setup. Please start again.")
+            return
+
         ticker_data = crypto_data.get(ticker)
         if not ticker_data:
             await update.message.reply_text(f"Data for {ticker} not found.")
             return
 
-        # Update or create the 'alerts' key in USER_DATA
-        if 'alerts' not in USER_DATA[chat_id]:
-            USER_DATA[chat_id]['alerts'] = []
-
-        # Prepare the alert info based on the input values
+        # Prepare and add alert info based on input values
         for value in values:
             alert_info = {
                 'type': alert_subtype,
                 'value': value,
-                'ticker': ticker
+                'ticker': ticker  # Using the ticker from the last added alert
             }
             USER_DATA[chat_id]['alerts'].append(alert_info)
 
-        # Log the alert setup
         logger.info(f"Alert(s) set for chat {chat_id} on ticker {ticker}: {USER_DATA[chat_id]['alerts']}")
-
-        # Send a confirmation message for each alert
+        
         response_messages = []
         for alert in USER_DATA[chat_id]['alerts']:
             if alert['type'] == 'absolute':
@@ -272,11 +270,10 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
         await update.message.reply_text("Please enter a valid number or a comma-separated pair of numbers for the alert.")
     except Exception as e:
         logger.error(f"Error processing alert setup for chat {chat_id}: {e}")
-        await update.message.reply_text("There was an error processing your alert setup. Please try again from the start.")
+        await update.message.reply_text("There was an error processing your alert setup. Please try again.")
     finally:
         # Reset the user state after processing
         USER_STATES[chat_id] = 0
-
 
 def finalize_alert_setup(chat_id: int, alert_info: dict):
     """
