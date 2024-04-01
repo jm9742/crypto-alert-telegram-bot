@@ -305,6 +305,7 @@ async def monitor_prices_and_volumes():
     while True:
         logger.info("Starting the monitoring loop.")
         for chat_id, user_info in USER_DATA.items():
+            logger.info(f"Processing user {chat_id} with info: {user_info}")
             if user_info.get('is_monitoring'):
                 alerts = user_info.get('alerts', [])
                 for alert in alerts:
