@@ -263,7 +263,7 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
         await update.message.reply_text("Please enter a valid number or a comma-separated pair of numbers for the alert.")
     except Exception as e:
         logger.error(f"Error processing alert setup for chat {chat_id}: {e}")
-        await update.message.reply_text("There was an error processing your alert setup. Please try again.")
+        await update.message.reply_text("There was an error processing your alert setup. Please try again from the start.")
     finally:
         # Reset the user state after processing
         USER_STATES[chat_id] = 0
