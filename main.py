@@ -185,25 +185,25 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
             
             await update.message.reply_text(response_message)
 
-        elif user_state == AWAITING_TICKER_FOR_PRICE_ALERT:
-            USER_DATA[chat_id][ticker] = user_input
-            USER_DATA[chat_id]['type'] = 'price'
-            keyboard = [
-                [InlineKeyboardButton("Percentage Change", callback_data='price_alert_percentage')],
-                [InlineKeyboardButton("Absolute Value", callback_data='price_alert_absolute')]
+        elif user_state == AWAITING_TICKER_FOR_PRICE_ALERT or user_state == AWAITING_TICKER_FOR_VOLUME_ALERT:
+            alert_type = 'price' if user_state == AWAITING_TICKER_FOR_PRICE_ALERT else 'volume'
+            
+            if 'alerts' not in USER_DATA[chat_id]:
+                USER_DATA[chat_id]['alerts'] = []
+                
+            USER_DATA[chat_id]['alerts'].append({
+                'ticker': user_input,
+                'type': alert_type,
+            })
+            
+            keyboard_buttons = [
+                [InlineKeyboardButton("Percentage Change", callback_data=f'{alert_type}_alert_percentage')],
+                [InlineKeyboardButton("Absolute Value", callback_data=f'{alert_type}_alert_absolute')]
             ]
-            await update.message.reply_text("Select the type of price alert:", reply_markup=InlineKeyboardMarkup(keyboard))
-            USER_STATES[chat_id] = CHOOSING_PRICE_ALERT_TYPE
+            message_text = "Select the type of price alert:" if alert_type == 'price' else "Select the type of volume alert:"
 
-        elif user_state == AWAITING_TICKER_FOR_VOLUME_ALERT:
-            USER_DATA[chat_id][ticker] = user_input
-            USER_DATA[chat_id]['type'] = 'volume'
-            keyboard = [
-                [InlineKeyboardButton("Percentage Change", callback_data='volume_alert_percentage')],
-                [InlineKeyboardButton("Absolute Value", callback_data='volume_alert_absolute')]
-            ]
-            await update.message.reply_text("Select the type of volume alert:", reply_markup=InlineKeyboardMarkup(keyboard))
-            USER_STATES[chat_id] = CHOOSING_VOLUME_ALERT_TYPE
+            await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard_buttons))
+            USER_STATES[chat_id] = CHOOSING_PRICE_ALERT_TYPE if alert_type == 'price' else CHOOSING_VOLUME_ALERT_TYPE
 
         elif user_state == SETTING_PRICE_ALERT_PERCENTAGE:
             await process_alert_setup(update, chat_id, user_state, user_input, 'percentage')
