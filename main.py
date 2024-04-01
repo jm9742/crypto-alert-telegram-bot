@@ -37,6 +37,9 @@ crypto_data = {}
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    USER_DATA[chat_id] = USER_DATA.get(chat_id, {})
+    USER_DATA[chat_id]['is_monitoring'] = True
     """Sends a welcome message with initial options and a note about stopping the bot."""
     keyboard = [
         [InlineKeyboardButton("Check Coin Info", callback_data='check_info')],
@@ -55,8 +58,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Stops the bot and monitoring tasks."""
-    global IS_MONITORING
-    IS_MONITORING = False
+    chat_id = update.effective_chat.id
+    if chat_id in USER_DATA:
+        USER_DATA[chat_id]['is_monitoring'] = False
     await update.message.reply_text('Monitoring and alerts have been stopped. Use /start to resume.')
 
 import asyncio
@@ -287,13 +291,23 @@ def finalize_alert_setup(chat_id: int, alert_info: dict):
 
 import asyncio
 
+
+
+async def send_alert_message(bot_instance, chat_id, alert_message):
+    try:
+        await bot_instance.send_message(chat_id=chat_id, text=alert_message)
+        logger.info(f"Alert sent to chat {chat_id}: {alert_message}")
+    except Exception as send_error:
+        logger.error(f"Failed to send message to chat {chat_id}: {send_error}")
+
 async def monitor_prices_and_volumes():
-    global IS_MONITORING, crypto_data
-    while IS_MONITORING:
+    global USER_DATA, crypto_data
+    while True:
         logger.info("Starting the monitoring loop.")
         for chat_id, user_info in USER_DATA.items():
-            if 'alerts' in user_info:
-                for alert in user_info['alerts']:
+            if user_info.get('is_monitoring'):
+                alerts = user_info.get('alerts', [])
+                for alert in alerts:
                     ticker = alert.get('ticker')
                     try:
                         current_data = crypto_data.get(ticker, {})
@@ -306,6 +320,7 @@ async def monitor_prices_and_volumes():
                         previous_price = alert.get('previous_price', current_price)
                         previous_volume = alert.get('previous_volume', current_volume)
 
+                        # Price change alerts
                         if alert.get('type') == 'percentage':
                             price_change_percentage = ((current_price - previous_price) / previous_price) * 100 if previous_price else 0
                             if abs(price_change_percentage) >= abs(alert['value']):
@@ -313,6 +328,7 @@ async def monitor_prices_and_volumes():
                                 message = f"🔔 Price Alert: {ticker} has {direction} by {abs(price_change_percentage):.4f}% (threshold: {alert['value']}%). Current price is ${current_price:.2f}."
                                 await send_alert_message(bot, chat_id, message)
 
+                        # Volume change alerts
                         if alert.get('type') == 'volume_percentage':
                             volume_change_percentage = ((current_volume - previous_volume) / previous_volume) * 100 if previous_volume else 0
                             if abs(volume_change_percentage) >= abs(alert['value']):
@@ -320,6 +336,7 @@ async def monitor_prices_and_volumes():
                                 message = f"🔔 Volume Alert: {ticker} has {direction} by {abs(volume_change_percentage):.4f}% (threshold: {alert['value']}%). Current volume is {current_volume:.2f}."
                                 await send_alert_message(bot, chat_id, message)
 
+                        # Absolute price alerts
                         if alert.get('type') == 'absolute':
                             price_crossed = (previous_price < alert['value'] <= current_price) or (previous_price > alert['value'] >= current_price)
                             if price_crossed and not alert.get('triggered', False):
@@ -327,6 +344,7 @@ async def monitor_prices_and_volumes():
                                 await send_alert_message(bot, chat_id, message)
                                 alert['triggered'] = True
 
+                        # Absolute volume alerts
                         if alert.get('type') == 'volume_absolute':
                             volume_crossed = (previous_volume < alert['value'] <= current_volume) or (previous_volume > alert['value'] >= current_volume)
                             if volume_crossed and not alert.get('triggered', False):
@@ -334,7 +352,7 @@ async def monitor_prices_and_volumes():
                                 await send_alert_message(bot, chat_id, message)
                                 alert['triggered'] = True
 
-                        # Update the previous values
+                        # Update the previous values for the next check
                         alert['previous_price'] = current_price
                         alert['previous_volume'] = current_volume
 
@@ -342,14 +360,7 @@ async def monitor_prices_and_volumes():
                         logger.error(f"Error processing alert for {ticker}: {e}")
 
         logger.info("Completed monitoring cycle, waiting for the next cycle.")
-        await asyncio.sleep(1)
-
-async def send_alert_message(bot, chat_id, message):
-    try:
-        await bot.send_message(chat_id, message)
-        logger.info(f"Alert sent to chat {chat_id}: {message}")
-    except Exception as e:
-        logger.error(f"Failed to send message to chat {chat_id}: {e}")
+        await asyncio.sleep(3)  # Sleep time adjusted for example, set as needed
 
 # Setup logging as per your requirement
 import logging
