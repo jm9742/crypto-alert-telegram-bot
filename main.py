@@ -186,7 +186,8 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text(response_message)
 
         elif user_state == AWAITING_TICKER_FOR_PRICE_ALERT:
-            USER_DATA[chat_id] = {'ticker': user_input, 'type': 'price'}
+            USER_DATA[chat_id][ticker] = user_input
+            USER_DATA[chat_id]['type'] = 'price'
             keyboard = [
                 [InlineKeyboardButton("Percentage Change", callback_data='price_alert_percentage')],
                 [InlineKeyboardButton("Absolute Value", callback_data='price_alert_absolute')]
@@ -195,7 +196,8 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
             USER_STATES[chat_id] = CHOOSING_PRICE_ALERT_TYPE
 
         elif user_state == AWAITING_TICKER_FOR_VOLUME_ALERT:
-            USER_DATA[chat_id] = {'ticker': user_input, 'type': 'volume'}
+            USER_DATA[chat_id][ticker] = user_input
+            USER_DATA[chat_id]['type'] = 'volume'
             keyboard = [
                 [InlineKeyboardButton("Percentage Change", callback_data='volume_alert_percentage')],
                 [InlineKeyboardButton("Absolute Value", callback_data='volume_alert_absolute')]
@@ -223,7 +225,7 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
         logger.error(f"Error handling user input for chat {chat_id}: {e}")
         await update.message.reply_text("There was an error processing your request. Please try again.")
         USER_STATES[chat_id] = 0  # Reset to default state
-
+        
 async def process_alert_setup(update, chat_id, user_state, user_input, alert_subtype):
     try:
         # Parse the input values, allowing for comma-separated values for dual thresholds
