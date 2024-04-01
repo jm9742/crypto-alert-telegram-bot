@@ -287,7 +287,7 @@ def finalize_alert_setup(chat_id: int, alert_info: dict):
 
 import asyncio
 
-async def monitor_prices_and_volumes(bot):
+async def monitor_prices_and_volumes():
     global IS_MONITORING, crypto_data
     while IS_MONITORING:
         logger.info("Starting the monitoring loop.")
