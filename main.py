@@ -31,16 +31,16 @@ SETTING_VOLUME_ALERT_ABSOLUTE = 9
 # Global state management
 USER_STATES = {}
 USER_DATA = {}
-IS_MONITORING = True  # To control the monitoring loop
 crypto_data = {}
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
+    # Initialize user data if not already present
     USER_DATA[chat_id] = USER_DATA.get(chat_id, {})
-    USER_DATA[chat_id]['is_monitoring'] = True
-    """Sends a welcome message with initial options and a note about stopping the bot."""
+    USER_DATA[chat_id]['is_monitoring'] = True  # Start monitoring for this user
+    
     keyboard = [
         [InlineKeyboardButton("Check Coin Info", callback_data='check_info')],
         [InlineKeyboardButton("Set Price Alert", callback_data='set_price_alert')],
@@ -51,17 +51,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Welcome! Choose an option to get started:\n\n"
         "You can use the commands below at any time:\n"
         "- /start to display this message again.\n"
-        "- /stop to halt monitoring and stop all alerts.\n\n"
+        "- /stop to halt monitoring and stop all alerts for you.\n\n"
         "Select an option from the menu to proceed."
     )
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Stops the bot and monitoring tasks."""
     chat_id = update.effective_chat.id
+    # Set user monitoring to False to stop monitoring for this user
     if chat_id in USER_DATA:
         USER_DATA[chat_id]['is_monitoring'] = False
-    await update.message.reply_text('Monitoring and alerts have been stopped. Use /start to resume.')
+        await update.message.reply_text('Monitoring and alerts have been stopped for you. Use /start to resume.')
+    else:
+        await update.message.reply_text('You have no active monitoring to stop.')
+
 
 import asyncio
 import requests
@@ -291,21 +294,19 @@ def finalize_alert_setup(chat_id: int, alert_info: dict):
 
 import asyncio
 
-
-
-async def send_alert_message(bot_instance, chat_id, alert_message):
+async def send_alert_message(bot, chat_id, message):
     try:
-        await bot_instance.send_message(chat_id=chat_id, text=alert_message)
-        logger.info(f"Alert sent to chat {chat_id}: {alert_message}")
-    except Exception as send_error:
-        logger.error(f"Failed to send message to chat {chat_id}: {send_error}")
+        await bot.send_message(chat_id=chat_id, text=message)
+        logger.info(f"Alert sent to chat {chat_id}: {message}")
+    except Exception as e:
+        logger.error(f"Failed to send message to chat {chat_id}: {e}")
 
 async def monitor_prices_and_volumes():
     global USER_DATA, crypto_data
     while True:
         logger.info("Starting the monitoring loop.")
         for chat_id, user_info in USER_DATA.items():
-            logger.info(f"Processing user {chat_id} with info: {user_info}")
+            logger.info(f"Checking alerts for user_ID {chat_id}, monitoring status: {user_info.get('is_monitoring')}")
             if user_info.get('is_monitoring'):
                 alerts = user_info.get('alerts', [])
                 for alert in alerts:
@@ -361,7 +362,7 @@ async def monitor_prices_and_volumes():
                         logger.error(f"Error processing alert for {ticker}: {e}")
 
         logger.info("Completed monitoring cycle, waiting for the next cycle.")
-        await asyncio.sleep(3)  # Sleep time adjusted for example, set as needed
+        await asyncio.sleep(3)  # Adjust the sleep duration as necessary
 
 # Setup logging as per your requirement
 import logging
