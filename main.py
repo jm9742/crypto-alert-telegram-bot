@@ -38,7 +38,7 @@ bot = Bot(token=TELEGRAM_BOT_TOKEN)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     # Initialize user data if not already present
-    USER_DATA[chat_id] = USER_DATA.get(chat_id, {})
+    USER_DATA[chat_id] = USER_DATA.get(chat_id, {'alerts': [], 'is_monitoring': True})
     USER_DATA[chat_id]['is_monitoring'] = True  # Start monitoring for this user
     
     keyboard = [
