@@ -59,7 +59,6 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     IS_MONITORING = False
     await update.message.reply_text('Monitoring and alerts have been stopped. Use /start to resume.')
 
-
 import asyncio
 import requests
 import json
@@ -101,6 +100,7 @@ async def update_crypto_data():
         # Wait before updating the data again to avoid hitting rate limits
         await asyncio.sleep(1)  # Adjust the sleep time as needed for your data source's update frequency
 
+
 from telegram import Update
 from telegram.ext import CallbackContext
 
@@ -138,6 +138,7 @@ async def button_handler(update: Update, context: CallbackContext) -> None:
     elif query.data == 'volume_alert_absolute':
         USER_STATES[chat_id] = SETTING_VOLUME_ALERT_ABSOLUTE
         await context.bot.send_message(chat_id, "Enter the absolute volume value for the alert (e.g., 50000 for 50000 units):")
+
 
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -216,7 +217,6 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("There was an error processing your request. Please try again.")
         USER_STATES[chat_id] = 0  # Reset to default state
 
-
 async def process_alert_setup(update, chat_id, user_state, user_input, alert_subtype):
     try:
         # Split the input on a comma if present, or create a single item list
@@ -287,19 +287,6 @@ def finalize_alert_setup(chat_id: int, alert_info: dict):
     # Add the new alert info to the user's list of alerts
     USER_DATA[chat_id]['alerts'].append(alert_info)
     logger.info(f"New alert added for chat {chat_id}: {alert_info}")
-
-
-import asyncio
-import logging
-
-# Assuming crypto_data is being updated as described
-global crypto_data
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-USER_DATA = {}
-IS_MONITORING = True
 
 async def monitor_prices_and_volumes():
     global IS_MONITORING, crypto_data
@@ -392,6 +379,10 @@ if __name__ == '__main__':
         
     finally:
         loop.close()
+
+
+
+
 
 
 
