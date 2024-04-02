@@ -322,7 +322,7 @@ async def send_alert_message(bot, chat_id, message):
     except Exception as e:
         logger.error(f"Failed to send message to chat {chat_id}: {e}")
 
-async def monitor_prices_and_volumes():
+async def monitor_prices_and_volumes(bot):
     global USER_DATA, crypto_data
     while True:
         logger.info("Starting the monitoring loop.")
