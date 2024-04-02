@@ -384,8 +384,9 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Or DEBUG for more info
 
+import asyncio
+
 async def main():
-    # Create the Application using your bot's token
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     # Register your handlers with the application
@@ -394,25 +395,25 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), text_handler))
 
-    # Start the price and volume monitoring function in a background task
-    asyncio.create_task(monitor_prices_and_volumes())
+    # Create background tasks and keep references to them
+    prices_and_volumes_task = asyncio.create_task(monitor_prices_and_volumes(application.bot))
+    update_crypto_data_task = asyncio.create_task(update_crypto_data())
 
-    # Start the cryptocurrency data updating function in a background task
-    asyncio.create_task(update_crypto_data())
-
-    # Start polling updates from Telegram
-    await application.run_polling()
+    try:
+        # Start polling updates from Telegram
+        await application.run_polling()
+    finally:
+        # If we reach this point, it's because run_polling has stopped for some reason
+        # Now we need to cancel and await the background tasks
+        prices_and_volumes_task.cancel()
+        update_crypto_data_task.cancel()
+        await asyncio.gather(prices_and_volumes_task, update_crypto_data_task, return_exceptions=True)
+        await application.shutdown()
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        # Perform any cleanup here
-        print('Bot stopped by user')
-        
-    finally:
-        loop.close()
+    # Use asyncio.run() to manage the event loop
+    asyncio.run(main())
+
 
 
 
