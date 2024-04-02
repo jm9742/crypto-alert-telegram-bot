@@ -1,9 +1,4 @@
-import telegram
-print(telegram.__version__)
-
-import nest_asyncio
-nest_asyncio.apply()
-
+import json
 import requests
 import asyncio
 import logging
@@ -15,6 +10,21 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = "7131056450:AAEgN6hEGsRvOb1KZ4MzaGJHON2ynqYO4II"
+
+def save_user_data():
+    with open('user_data.json', 'w') as file:
+        json.dump(USER_DATA, file, ensure_ascii=False, indent=4)
+
+def load_user_data():
+    try:
+        with open('user_data.json', 'r') as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        logger.info("No existing user data found, starting with an empty dictionary.")
+        return {}  # Return an empty dict if the file doesn't exist or is empty
+    
+# Load user data from file or initialize if not present
+USER_DATA = load_user_data()
 
 # Assuming states are defined as constants
 AWAITING_COMMAND = 0
@@ -30,7 +40,6 @@ SETTING_VOLUME_ALERT_ABSOLUTE = 9
 
 # Global state management
 USER_STATES = {}
-USER_DATA = {}
 crypto_data = {}
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
@@ -40,6 +49,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Initialize user data if not already present
     USER_DATA[chat_id] = USER_DATA.get(chat_id, {'alerts': [], 'is_monitoring': True})
     USER_DATA[chat_id]['is_monitoring'] = True  # Start monitoring for this user
+    
+    # Load user data from file or initialize if not present
+    save_user_data()
     
     keyboard = [
         [InlineKeyboardButton("Check Coin Info", callback_data='check_info')],
@@ -61,7 +73,11 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Set user monitoring to False to stop monitoring for this user
     if chat_id in USER_DATA:
         USER_DATA[chat_id]['is_monitoring'] = False
+        
+        # Save the updated USER_DATA to the file
+        save_user_data()
         await update.message.reply_text('Monitoring and alerts have been stopped for you. Use /start to resume.')
+        
     else:
         await update.message.reply_text('You have no active monitoring to stop.')
 
