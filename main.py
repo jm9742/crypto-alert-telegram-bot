@@ -1,3 +1,9 @@
+import telegram
+print(telegram.__version__)
+
+import nest_asyncio
+nest_asyncio.apply()
+
 import json
 import requests
 import asyncio
