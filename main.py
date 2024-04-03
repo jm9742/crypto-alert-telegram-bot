@@ -250,43 +250,43 @@ async def text_handler(update: Update, context: CallbackContext) -> None:
         
 async def process_alert_setup(update, chat_id, user_state, user_input, alert_subtype):
     try:
-        # Parse the input values, allowing for comma-separated values for dual thresholds
         values = [float(val.strip()) for val in user_input.split(',') if val.strip()]
 
-        if USER_DATA[chat_id]['alerts']:
-            ticker = USER_DATA[chat_id]['alerts'][-1]['ticker']
-        else:
+        if not USER_DATA[chat_id].get('alerts'):
             await update.message.reply_text("No ticker selected for alert setup. Please start again.")
             return
+
+        # Assumption: The last alert in 'alerts' list is the one we're currently setting up.
+        ticker = USER_DATA[chat_id]['alerts'][-1]['ticker']
 
         ticker_data = crypto_data.get(ticker)
         if not ticker_data:
             await update.message.reply_text(f"Data for {ticker} not found.")
             return
 
-        # Prepare and add alert info based on input values
+        response_messages = []
+
         for value in values:
-            alert_info = {
+            new_alert_info = {
                 'type': alert_subtype,
                 'value': value,
-                'ticker': ticker  # Using the ticker from the last added alert
+                'ticker': ticker
             }
-            USER_DATA[chat_id]['alerts'].append(alert_info)
 
-        logger.info(f"Alert(s) set for chat {chat_id} on ticker {ticker}: {USER_DATA[chat_id]['alerts']}")
-        
-        response_messages = []
-        for alert in USER_DATA[chat_id]['alerts']:
-            if alert['type'] == 'absolute':
-                response_messages.append(f"✅ Alert set to notify when the price reaches ${alert['value']:.2f} for {ticker}.")
-            elif alert['type'] in ['percentage', 'volume_percentage']:
-                direction = "increase" if alert['value'] > 0 else "decrease"
-                response_messages.append(f"✅ Alert set for a {alert['value']}% {direction} for {ticker}.")
-            elif alert['type'] == 'volume_absolute':
-                response_messages.append(f"✅ Volume alert set to notify when the volume reaches {alert['value']} for {ticker}.")
+            if new_alert_info not in USER_DATA[chat_id]['alerts']:
+                USER_DATA[chat_id]['alerts'].append(new_alert_info)
 
-        final_response_message = " ".join(response_messages)
-        await update.message.reply_text(final_response_message)
+                if new_alert_info['type'] == 'absolute':
+                    response_messages.append(f"✅ Alert set to notify when the price reaches ${value:.2f} for {ticker}.")
+                elif new_alert_info['type'] in ['percentage', 'volume_percentage']:
+                    direction = "increase" if value > 0 else "decrease"
+                    response_messages.append(f"✅ Alert set for a {value}% {direction} for {ticker}.")
+                elif new_alert_info['type'] == 'volume_absolute':
+                    response_messages.append(f"✅ Volume alert set to notify when the volume reaches {value} for {ticker}.")
+
+        if response_messages:
+            final_response_message = " ".join(response_messages)
+            await update.message.reply_text(final_response_message)
 
     except ValueError:
         await update.message.reply_text("Please enter a valid number or a comma-separated pair of numbers for the alert.")
@@ -294,8 +294,7 @@ async def process_alert_setup(update, chat_id, user_state, user_input, alert_sub
         logger.error(f"Error processing alert setup for chat {chat_id}: {e}")
         await update.message.reply_text("There was an error processing your alert setup. Please try again.")
     finally:
-        # Reset the user state after processing
-        USER_STATES[chat_id] = 0
+        USER_STATES[chat_id] = 0  # Reset the state to default after processing
 
 def finalize_alert_setup(chat_id: int, alert_info: dict):
     """
