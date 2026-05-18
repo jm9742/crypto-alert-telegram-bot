@@ -1,0 +1,78 @@
+Overview
+
+This project is a real-time cryptocurrency monitoring and alerting bot built using Python and the Telegram Bot API. The bot continuously retrieves live cryptocurrency market data from the BitMart public API, processes streaming market information asynchronously, and allows users to create customizable price and volume alerts directly through Telegram.
+
+The system was designed to explore event-driven programming, asynchronous data pipelines, and real-time market monitoring workflows commonly used in quantitative trading and financial analytics environments.
+
+⸻
+
+Features
+
+Real-Time Market Monitoring
+
+* Continuously retrieves live cryptocurrency market data from the BitMart public API
+* Tracks:
+    * Last traded price
+    * 24-hour volume
+    * Bid/ask prices
+    * Intraday highs/lows
+    * Percentage price changes
+
+Telegram Bot Interface
+
+Users can interact with the bot directly through Telegram commands and menus.
+
+Supported functionality includes:
+
+* Checking live cryptocurrency information
+* Setting price alerts
+* Setting volume alerts
+* Starting and stopping monitoring sessions
+* Interactive menu navigation using Telegram inline buttons
+
+⸻
+
+Alert System
+
+Price Alerts
+
+Supports:
+
+* Percentage-based alerts
+    * Example: Notify when BTC increases by 5%
+* Absolute price alerts
+    * Example: Notify when ETH reaches $3000
+
+Volume Alerts
+
+Supports:
+
+* Percentage-based volume changes
+* Absolute volume thresholds
+
+Monitoring Engine
+
+* Runs asynchronously using asyncio
+* Continuously evaluates live market conditions
+* Sends automated Telegram notifications when thresholds are triggered
+
+⸻
+
+Technical Highlights
+
+Asynchronous Architecture
+
+Implemented asynchronous workflows using:
+
+* asyncio
+* python-telegram-bot
+* background monitoring tasks
+
+This allows the bot to:
+
+* Process user interactions
+* Poll market data
+* Monitor alerts
+* Send notifications
+
+simultaneously in real time.
